@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+	"strings"
 )
 
 const reCAPTCHALink = "https://www.recaptcha.net/recaptcha/api/siteverify"
+const turnstileLink = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
 // VERSION the recaptcha api version
 type VERSION int8
@@ -72,13 +74,19 @@ func NewReCAPTCHA(ReCAPTCHASecret string, version VERSION, timeout time.Duration
 	if ReCAPTCHASecret == "" {
 		return ReCAPTCHA{}, fmt.Errorf("recaptcha secret cannot be blank")
 	}
+	secret := ReCAPTCHASecret
+	link := reCAPTCHALink
+	if strings.HasPrefix(secret, "turnstile:") {
+		secret = strings.TrimPrefix(secret, "turnstile:")
+		link = turnstileLink
+	}
 	return ReCAPTCHA{
 		client: &http.Client{
 			Timeout: timeout,
 		},
 		horloge:       &realClock{},
-		Secret:        ReCAPTCHASecret,
-		ReCAPTCHALink: reCAPTCHALink,
+		Secret:        secret,
+		ReCAPTCHALink: link,
 		Timeout:       timeout,
 		Version:       version,
 	}, nil
@@ -169,7 +177,7 @@ func (r *ReCAPTCHA) confirm(recaptcha reCHAPTCHARequest, options VerifyOption) (
 			return
 		}
 	}
-	if result.ErrorCodes != nil {
+	if result.ErrorCodes != nil && len(result.ErrorCodes) > 0 {
 		Err = fmt.Errorf("remote error codes: %v", result.ErrorCodes)
 		return
 	}
